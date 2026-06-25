@@ -16,6 +16,9 @@ function quote(overrides: Partial<MarketQuote> = {}): MarketQuote {
     change: 0.5,
     change_pct: 0.641,
     as_of: '2026-06-25T12:00:00Z',
+    source_ts: '2026-06-25T12:00:00Z',
+    ingested_at: '2026-06-25T12:00:05Z',
+    stale: false,
     series: [
       { t: '2026-06-25T11:59:55Z', price: 78.0 },
       { t: '2026-06-25T12:00:00Z', price: 78.5 },
@@ -44,5 +47,10 @@ describe('MarketQuotesTable', () => {
   it('renders a dash when the percentage change is unavailable', () => {
     render(<MarketQuotesTable quotes={[quote({ change_pct: null })]} />);
     expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
+  it('shows a text status for stale and live quotes', () => {
+    render(<MarketQuotesTable quotes={[quote({ stale: true })]} />);
+    expect(screen.getByText('Stale')).toBeInTheDocument();
   });
 });

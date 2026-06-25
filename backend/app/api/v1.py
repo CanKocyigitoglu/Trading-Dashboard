@@ -6,19 +6,27 @@ response models. No financial calculation or data access happens here.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
 
+from ..adapters import yahoo_market_source as yh
 from ..config import Settings, get_settings
+from ..db import get_sessionmaker
 from ..schemas.models import (
     AlertsResponse,
     FilterOptions,
+    IngestionRunOut,
+    IngestionRunsResponse,
+    MarketHistoryResponse,
     MarketOverviewResponse,
     PositionsResponse,
     SummaryOut,
 )
-from ..services import dashboard, market
+from ..services import dashboard, ingestion, market
 from ..services.dashboard import Filters
 
 router = APIRouter(prefix="/api/v1")
@@ -38,6 +46,39 @@ def _filters(
 
 FiltersDep = Annotated[Filters, Depends(_filters)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+def _db_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "DB_NOT_CONFIGURED",
+            "message": "Market persistence requires DATABASE_URL in backend/.env.",
+        },
+    )
+
+
+def require_db_session(settings: SettingsDep) -> Iterator[Session]:
+    """A DB session, or 503 when no database is configured."""
+    if not settings.database_url:
+        raise _db_unavailable()
+    session = get_sessionmaker()()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def market_session(settings: SettingsDep) -> Iterator[Session | None]:
+    """A DB session for ``yahoo`` mode, or ``None`` for the synthetic generator."""
+    if settings.market_source == "synthetic":
+        yield None
+        return
+    yield from require_db_session(settings)
+
+
+DbSessionDep = Annotated[Session, Depends(require_db_session)]
+MarketSessionDep = Annotated["Session | None", Depends(market_session)]
 
 
 @router.get("/health")
@@ -71,5 +112,42 @@ def alerts(filters: FiltersDep, settings: SettingsDep) -> AlertsResponse:
 
 
 @router.get("/market", response_model=MarketOverviewResponse)
-def market_overview() -> MarketOverviewResponse:
-    return market.get_market_overview()
+def market_overview(session: MarketSessionDep, settings: SettingsDep) -> MarketOverviewResponse:
+    return market.get_market_overview(session, settings=settings)
+
+
+@router.get("/market/history", response_model=MarketHistoryResponse)
+def market_history(
+    session: DbSessionDep,
+    symbol: Annotated[str, Query(min_length=1, max_length=32)],
+    since: Annotated[datetime | None, Query(description="Inclusive UTC lower bound")] = None,
+    until: Annotated[datetime | None, Query(description="Inclusive UTC upper bound")] = None,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 1000,
+) -> MarketHistoryResponse:
+    if symbol not in yh.BY_SYMBOL:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "UNKNOWN_SYMBOL", "message": f"Unknown symbol: {symbol}"},
+        )
+    return market.get_market_history(session, symbol, since=since, until=until, limit=limit)
+
+
+@router.post("/market/ingest", response_model=IngestionRunOut)
+def market_ingest(session: DbSessionDep, settings: SettingsDep) -> IngestionRunOut:
+    if settings.market_source != "yahoo":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "MARKET_SOURCE_NOT_YAHOO",
+                "message": "Set MARKET_SOURCE=yahoo to ingest live data.",
+            },
+        )
+    return market.run_to_out(ingestion.run_ingestion(session))
+
+
+@router.get("/ingestion-runs", response_model=IngestionRunsResponse)
+def ingestion_runs(
+    session: DbSessionDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> IngestionRunsResponse:
+    return market.list_ingestion_runs(session, limit)

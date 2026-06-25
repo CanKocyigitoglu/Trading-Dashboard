@@ -85,13 +85,44 @@ export interface MarketQuote {
   change: number;
   change_pct: number | null;
   as_of: string;
+  source_ts: string | null;
+  ingested_at: string | null;
+  stale: boolean;
   series: MarketSeriesPoint[];
 }
 
 export interface MarketOverviewResponse {
   as_of: string;
+  source: string;
   synthetic: boolean;
+  stale_after_seconds: number;
   quotes: MarketQuote[];
+}
+
+export interface MarketHistoryResponse {
+  symbol: string;
+  name: string;
+  commodity: string;
+  unit: string;
+  currency: string;
+  source: string;
+  count: number;
+  points: MarketSeriesPoint[];
+}
+
+export interface IngestionRunOut {
+  id: number;
+  source: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  symbols_requested: number;
+  rows_written: number;
+  message: string | null;
+}
+
+export interface IngestionRunsResponse {
+  items: IngestionRunOut[];
 }
 
 export interface Filters {

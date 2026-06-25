@@ -84,18 +84,20 @@ class FilterOptions(BaseModel):
 
 
 class MarketSeriesPoint(BaseModel):
-    """One point on a synthetic price series. ``t`` is bucket-aligned UTC."""
+    """One point on a price series. ``t`` is the source bar/quote time in UTC."""
 
     t: datetime
     price: float
 
 
 class MarketQuote(BaseModel):
-    """A synthetic, illustrative market quote for one commodity.
+    """A market quote for one commodity.
 
     ``change`` is the move versus the previous point and ``change_pct`` is that
     move as a percentage; ``change_pct`` is ``None`` when the previous price is
-    zero so an unavailable ratio is never shown as zero.
+    zero so an unavailable ratio is never shown as zero. ``source_ts`` is the
+    latest source timestamp and ``ingested_at`` when it was persisted; ``stale``
+    is set when ``source_ts`` is older than the configured staleness threshold.
     """
 
     symbol: str
@@ -108,12 +110,47 @@ class MarketQuote(BaseModel):
     change: float
     change_pct: float | None
     as_of: datetime
+    source_ts: datetime | None
+    ingested_at: datetime | None
+    stale: bool
     series: list[MarketSeriesPoint]
 
 
 class MarketOverviewResponse(BaseModel):
-    """Synthetic market snapshot. ``synthetic`` is always ``True`` this phase."""
+    """Latest market snapshot. ``synthetic`` is ``True`` only in offline mode."""
 
     as_of: datetime
+    source: str
     synthetic: bool
+    stale_after_seconds: int
     quotes: list[MarketQuote]
+
+
+class MarketHistoryResponse(BaseModel):
+    """Persisted price history for one commodity, oldest point first."""
+
+    symbol: str
+    name: str
+    commodity: str
+    unit: str
+    currency: str
+    source: str
+    count: int
+    points: list[MarketSeriesPoint]
+
+
+class IngestionRunOut(BaseModel):
+    """One ingestion audit record (the control/management surface)."""
+
+    id: int
+    source: str
+    started_at: datetime
+    finished_at: datetime | None
+    status: str
+    symbols_requested: int
+    rows_written: int
+    message: str | None
+
+
+class IngestionRunsResponse(BaseModel):
+    items: list[IngestionRunOut]

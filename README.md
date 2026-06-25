@@ -6,7 +6,10 @@ slice: a read-only dashboard that surfaces positions, exposure, P/L,
 utilisation and supplied VaR, and raises deterministic, explainable alerts.
 
 > **Demonstration prototype.** Not a trade-execution, pricing or booking
-> system. All sample data is **synthetic**. Upstream access is read-only.
+> system. Position data is **synthetic sample data**; the Live Market page uses
+> **real prices from a free, unofficial source (Yahoo Finance)** — clearly
+> labelled, not the firm's authoritative feed, and stored as application-owned
+> history. Upstream access is read-only.
 
 ## Architecture
 
@@ -15,9 +18,10 @@ A modular monolith:
 ```
 React + TypeScript (Vite, MUI, Plotly, TanStack Query)        frontend/
         │  typed API over /api/v1
-FastAPI + Pydantic + pandas                                    backend/
-        │  read-only source adapter → domain calc → alerts → typed API
-data/sample/positions.csv  (deterministic synthetic source)
+FastAPI + Pydantic + pandas + SQLAlchemy 2.x                   backend/
+        │  read-only adapters → domain calc / ingestion → typed API
+data/sample/positions.csv     (deterministic synthetic source)
+Yahoo Finance (yfinance)  →   PostgreSQL market history (e.g. Neon)
 ```
 
 Flow: **source adapter → domain valuation → portfolio summary + alert
@@ -36,22 +40,34 @@ filters and states. The frontend never duplicates business logic.
   - `adapters/` — read-only CSV source, precision-preserving.
   - `api/` (`/api/v1`) — `health`, `filters`, `positions` (paginated/filterable),
     `summary`, `alerts`. Errors map to stable machine-readable codes.
+- **Live market (real data + persisted history)**
+  - `adapters/yahoo_market_source.py` — read-only yfinance adapter; source time,
+    currency and unit preserved with **no conversion** (grains in `USc`/bu,
+    copper in USD/lb). `POWER` omitted — no reliable free source.
+  - `db_models.py` + `repositories/` — idempotent persistence
+    (`UNIQUE(symbol, source_ts)`) into `market_observation`, plus an
+    `ingestion_run` audit table for control/management.
+  - `services/ingestion.py` + `app/ingest.py` — one ingestion cycle or a single
+    `--loop` process; `POST /market/ingest` triggers it on demand.
+  - `api/` — `/market` (latest + recent series), `/market/history`,
+    `/ingestion-runs`.
 - **Frontend** (`frontend/src`)
   - KPI cards, positions table (MUI X Data Grid), exposure-concentration chart
     (Plotly), alerts panel, and desk/trader/commodity filters synced to the URL.
+  - Live Market page: real-data labelling, source/ingest timestamps, **text**
+    stale status, DB-backed history chart, and a "Refresh now" ingestion trigger.
   - Loading, empty, stale-refresh and error states. Polling for near-real-time
     refresh, preserving the last good response during background refresh.
   - Severity shown as **text and** colour (never colour alone).
 
 ## Deferred (intentionally not built yet)
 
-The project rules say not to build infrastructure for hypothetical needs. The
-first dashboard is read-only and needs no application-owned state, so these are
-deferred until a feature requires them:
+The project rules say not to build infrastructure for hypothetical needs.
 
-- **PostgreSQL + SQLAlchemy + Alembic + Docker Compose** — added with the first
-  write workflow (e.g. alert acknowledgements, audit). Not substituted with
-  SQLite.
+- **PostgreSQL + SQLAlchemy 2.x + Alembic** — **now added** for the live-market
+  history slice, using a managed database (e.g. Neon); no local Docker Compose.
+  Not substituted with SQLite. Other application-owned state (e.g. alert
+  acknowledgements) will reuse it as features require.
 - **Authentication (OIDC/SSO)** — added when access control is required.
 
 ## Toolchain note
@@ -59,8 +75,9 @@ deferred until a feature requires them:
 The prescribed stack was adapted to the local environment (Node 16, no Docker):
 the frontend pins **Vite 4 + Vitest 0.34** (Node-16-compatible) instead of
 Vite 5. The backend matches the spec (Python 3.11+, FastAPI, Pydantic v2,
-pandas). When Node 18+ and Docker are available, the frontend versions can be
-bumped and the persistence slice added.
+pandas, SQLAlchemy 2.x, Alembic, psycopg 3). Persistence uses a **managed
+PostgreSQL** (e.g. Neon) rather than local Docker Compose, since Docker is not
+available in this environment.
 
 ## Running locally
 
@@ -82,6 +99,28 @@ cd frontend && npm run dev
 With GNU Make available, the same steps are `make setup`, `make dev-backend`,
 `make dev-frontend`.
 
+### Live market data (optional)
+
+The positions dashboard needs no database. For the Live Market page's **real**
+data and history, point the backend at a PostgreSQL database and ingest:
+
+```bash
+# 1) Create a free Postgres (e.g. Neon) and set the URL in backend/.env
+#    (git-ignored). Note the +psycopg driver and sslmode=require:
+# DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST/neondb?sslmode=require
+
+# 2) Apply migrations
+cd backend && python -m alembic upgrade head        # or: make migrate
+
+# 3) Fetch + store data
+cd backend && python -m app.ingest                  # one cycle  (make ingest)
+cd backend && python -m app.ingest --loop --interval 60   # continuous (make ingest-loop)
+# …or click "Refresh now" on the page.
+```
+
+Without a `DATABASE_URL`, set `MARKET_SOURCE=synthetic` to run the page on the
+offline illustrative generator (no DB, no network).
+
 ## Tests and checks
 
 ```bash
@@ -92,9 +131,11 @@ cd backend && python -m pytest -q && ruff check . && ruff format --check . && my
 cd frontend && npm test && npm run typecheck && npm run build
 ```
 
-Current status: backend **36 pytest** passing (ruff + mypy clean); frontend
-**10 Vitest** passing (tsc + build clean). Alert rules are tested immediately
-below, at and above each threshold, plus missing, stale and duplicate inputs.
+Current status: backend **50 pytest** passing + **3 Postgres integration tests**
+that skip without `DATABASE_URL` (ruff + mypy clean); frontend **15 Vitest**
+passing (tsc + build clean). Alert rules are tested immediately below, at and
+above each threshold, plus missing, stale and duplicate inputs; ingestion is
+tested for idempotency (the `ON CONFLICT` path).
 
 ## Key data rules honoured
 

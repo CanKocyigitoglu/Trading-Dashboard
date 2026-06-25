@@ -28,14 +28,10 @@ function filtersToParams(filters?: Filters): URLSearchParams {
   return params;
 }
 
-export async function getJson<T>(path: string, filters?: Filters): Promise<T> {
-  const params = filtersToParams(filters);
-  const query = params.toString();
-  const url = `${API_BASE}${path}${query ? `?${query}` : ''}`;
-
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, { headers: { Accept: 'application/json' } });
+    response = await fetch(url, { headers: { Accept: 'application/json' }, ...init });
   } catch (cause) {
     throw new ApiError(0, 'network_error', 'Could not reach the backend service.');
   }
@@ -45,9 +41,11 @@ export async function getJson<T>(path: string, filters?: Filters): Promise<T> {
     let message = `Request failed with status ${response.status}.`;
     try {
       const body = await response.json();
-      if (body && typeof body === 'object') {
-        code = body.code ?? code;
-        message = body.message ?? message;
+      // FastAPI nests our {code, message} under "detail" for HTTPException.
+      const payload = body && typeof body === 'object' && 'detail' in body ? body.detail : body;
+      if (payload && typeof payload === 'object') {
+        code = payload.code ?? code;
+        message = payload.message ?? message;
       }
     } catch {
       // response had no JSON body; keep the generic message
@@ -56,4 +54,14 @@ export async function getJson<T>(path: string, filters?: Filters): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+export async function getJson<T>(path: string, filters?: Filters): Promise<T> {
+  const params = filtersToParams(filters);
+  const query = params.toString();
+  return request<T>(`${API_BASE}${path}${query ? `?${query}` : ''}`);
+}
+
+export async function postJson<T>(path: string): Promise<T> {
+  return request<T>(`${API_BASE}${path}`, { method: 'POST' });
 }

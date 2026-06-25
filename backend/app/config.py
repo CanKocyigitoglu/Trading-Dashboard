@@ -1,8 +1,9 @@
 """Application settings loaded from the environment.
 
-Only what the current read-only slice needs: where the sample data lives, the
-display timezone, and CORS origins for the dev frontend. Database settings are
-intentionally absent until a persistence feature requires them.
+Covers the read-only positions slice (sample CSV, timezone, CORS) and the live
+market slice (a database for persisted observations and the market data source).
+``database_url`` is optional so the positions dashboard still runs with no DB;
+the live-market endpoints raise a clear error when it is unset.
 """
 
 from __future__ import annotations
@@ -22,6 +23,15 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
     data_source_mode: str = "sample"
     sample_data_path: Path = _REPO_ROOT / "data" / "sample" / "positions.csv"
+
+    # Live market slice. "yahoo" pulls real prices via yfinance; "synthetic" keeps
+    # the offline illustrative generator (no DB, no network) for demos and tests.
+    market_source: str = "yahoo"
+    # A quote is flagged stale when its source timestamp is older than this.
+    market_stale_after_seconds: int = 900
+    # SQLAlchemy URL for the persisted market history, e.g.
+    # postgresql+psycopg://user:pass@host/db?sslmode=require . None disables persistence.
+    database_url: str | None = None
 
 
 @lru_cache

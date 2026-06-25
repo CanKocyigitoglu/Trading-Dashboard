@@ -14,20 +14,20 @@ FIXED_NOW = datetime(2026, 6, 25, 12, 0, 7, tzinfo=UTC)  # mid-bucket on purpose
 
 
 def test_overview_is_reproducible_for_a_fixed_now():
-    first = mkt.build_overview(FIXED_NOW)
-    second = mkt.build_overview(FIXED_NOW)
+    first = mkt.build_overview(FIXED_NOW, 900)
+    second = mkt.build_overview(FIXED_NOW, 900)
     assert first == second  # guards against hash() salting / RNG state leakage
 
 
 def test_overview_covers_the_whole_universe_and_is_labelled_synthetic():
-    overview = mkt.build_overview(FIXED_NOW)
+    overview = mkt.build_overview(FIXED_NOW, 900)
     assert overview.synthetic is True
     symbols = {q.symbol for q in overview.quotes}
     assert symbols == {c.symbol for c in mkt.COMMODITY_UNIVERSE}
 
 
 def test_quote_series_has_window_length_and_bucket_aligned_utc_times():
-    quote = mkt.build_overview(FIXED_NOW).quotes[0]
+    quote = mkt.build_overview(FIXED_NOW, 900).quotes[0]
     assert len(quote.series) == mkt.WINDOW
 
     # as_of is the start of the current bucket, not the raw (mid-bucket) now.
@@ -42,7 +42,7 @@ def test_quote_series_has_window_length_and_bucket_aligned_utc_times():
 
 
 def test_change_matches_last_two_points():
-    quote = mkt.build_overview(FIXED_NOW).quotes[0]
+    quote = mkt.build_overview(FIXED_NOW, 900).quotes[0]
     assert quote.last_price == quote.series[-1].price
     assert quote.previous_price == quote.series[-2].price
     assert quote.change == round(quote.last_price - quote.previous_price, 4)
@@ -51,13 +51,13 @@ def test_change_matches_last_two_points():
 
 
 def test_series_actually_moves():
-    quote = mkt.build_overview(FIXED_NOW).quotes[0]
+    quote = mkt.build_overview(FIXED_NOW, 900).quotes[0]
     prices = {p.price for p in quote.series}
     assert len(prices) > 1  # not a flat line
 
 
 def test_prices_stay_within_the_synthetic_volatility_band():
-    overview = mkt.build_overview(FIXED_NOW)
+    overview = mkt.build_overview(FIXED_NOW, 900)
     by_symbol = {c.symbol: c for c in mkt.COMMODITY_UNIVERSE}
     for quote in overview.quotes:
         commodity = by_symbol[quote.symbol]

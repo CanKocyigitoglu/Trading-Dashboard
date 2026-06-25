@@ -96,6 +96,7 @@ def build_quote(commodity: Commodity, now_utc: datetime) -> MarketQuote:
     previous = series[-2].price
     change = round(last - previous, 4)
     change_pct = None if previous == 0 else round(change / previous * 100, 4)
+    as_of = _bucket_time(current)
     return MarketQuote(
         symbol=commodity.symbol,
         name=commodity.name,
@@ -106,15 +107,20 @@ def build_quote(commodity: Commodity, now_utc: datetime) -> MarketQuote:
         previous_price=previous,
         change=change,
         change_pct=change_pct,
-        as_of=_bucket_time(current),
+        as_of=as_of,
+        source_ts=as_of,
+        ingested_at=now_utc,
+        stale=False,
         series=series,
     )
 
 
-def build_overview(now_utc: datetime) -> MarketOverviewResponse:
+def build_overview(now_utc: datetime, stale_after_seconds: int) -> MarketOverviewResponse:
     """Build the full synthetic market snapshot at ``now_utc``."""
     return MarketOverviewResponse(
         as_of=_bucket_time(bucket_index_for(now_utc)),
+        source="synthetic",
         synthetic=True,
+        stale_after_seconds=stale_after_seconds,
         quotes=[build_quote(c, now_utc) for c in COMMODITY_UNIVERSE],
     )

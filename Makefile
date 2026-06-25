@@ -1,5 +1,5 @@
 .PHONY: setup dev dev-backend dev-frontend test test-backend test-frontend check clean \
-        db-up db-down migrate seed
+        db-up db-down migrate seed ingest ingest-loop
 
 # --- Setup -----------------------------------------------------------------
 
@@ -41,10 +41,22 @@ clean:
 	rm -rf backend/.pytest_cache backend/.ruff_cache backend/.mypy_cache frontend/dist
 	find backend -type d -name __pycache__ -prune -exec rm -rf {} +
 
-# --- Database (deferred) ---------------------------------------------------
-# The current slice is read-only and has no persistence, so these targets are
-# placeholders. They will be implemented (docker-compose + Alembic) when a
-# write workflow first requires application-owned state.
+# --- Database --------------------------------------------------------------
+# PostgreSQL is provided by a managed service (e.g. Neon); there is no local
+# docker-compose. Set DATABASE_URL in backend/.env, then apply migrations.
 
-db-up db-down migrate seed:
-	@echo "No database in the current read-only slice. See README (Deferred)."
+db-up db-down:
+	@echo "Using managed PostgreSQL (e.g. Neon). No local container to start/stop."
+
+migrate:
+	cd backend && python -m alembic upgrade head
+
+# --- Market data ingestion -------------------------------------------------
+# `seed` runs one cycle to populate initial history; `ingest-loop` keeps it
+# refreshing as a single dedicated process.
+
+ingest seed:
+	cd backend && python -m app.ingest
+
+ingest-loop:
+	cd backend && python -m app.ingest --loop --interval 60

@@ -37,9 +37,9 @@ describe('App navigation', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Live Market' }));
 
-    // The synthetic-data banner is unique to the market page and renders before
+    // The data-source banner is unique to the market page and renders before
     // any data loads.
-    expect(screen.getByText(/Illustrative synthetic market data/)).toBeInTheDocument();
+    expect(screen.getByText(/Yahoo Finance/)).toBeInTheDocument();
     expect(screen.queryByText('Trading Risk Dashboard')).not.toBeInTheDocument();
   });
 });
