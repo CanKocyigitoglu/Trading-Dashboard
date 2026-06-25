@@ -5,9 +5,11 @@ PostgreSQL: idempotent ingestion (the ON CONFLICT path), the audit record, and
 the DB-backed overview. They are skipped when ``DATABASE_URL`` is unset and they
 mock the network boundary (``fetch_frame``) so they never call Yahoo.
 
-Each test runs inside one transaction that is rolled back on teardown
+Each test runs against a dedicated, throwaway schema (``it_market``) and inside
+one transaction that is rolled back on teardown
 (``join_transaction_mode="create_savepoint"`` keeps the service's commit inside a
-savepoint), so they never leave rows behind in the real database.
+savepoint). The schema isolates the fixed test timestamps from real ingested data
+in ``public`` (same ``UNIQUE(symbol, source_ts)``), and nothing is left behind.
 """
 
 from __future__ import annotations
@@ -30,6 +32,8 @@ from app.services import ingestion, market
 WTI = yh.BY_SYMBOL["WTI"]
 GOLD = yh.BY_SYMBOL["GOLD"]
 
+TEST_SCHEMA = "it_market"  # isolated from real data in `public`
+
 
 @pytest.fixture
 def db_session():
@@ -37,8 +41,17 @@ def db_session():
     if not settings.database_url:
         pytest.skip("DATABASE_URL not set; skipping Postgres integration tests")
     engine = create_engine(normalise_database_url(settings.database_url))
-    Base.metadata.create_all(engine)  # no-op once `alembic upgrade head` has run
-    connection = engine.connect()
+
+    # Create the test tables in a fresh throwaway schema; schema_translate_map
+    # redirects the (schema-less) models into it for both DDL and queries.
+    with engine.connect() as setup:
+        setup.exec_driver_sql(f"DROP SCHEMA IF EXISTS {TEST_SCHEMA} CASCADE")
+        setup.exec_driver_sql(f"CREATE SCHEMA {TEST_SCHEMA}")
+        setup.commit()
+    connection = engine.connect().execution_options(schema_translate_map={None: TEST_SCHEMA})
+    Base.metadata.create_all(connection, checkfirst=False)
+    connection.commit()
+
     outer = connection.begin()
     session = Session(bind=connection, join_transaction_mode="create_savepoint")
     try:
@@ -47,6 +60,9 @@ def db_session():
         session.close()
         outer.rollback()  # discard everything this test wrote
         connection.close()
+        with engine.connect() as teardown:
+            teardown.exec_driver_sql(f"DROP SCHEMA IF EXISTS {TEST_SCHEMA} CASCADE")
+            teardown.commit()
         engine.dispose()
 
 
@@ -74,6 +90,15 @@ def test_insert_is_idempotent(db_session):
     assert len(latest) == 1
     assert latest[0].price == Decimal("78.40")
     assert latest[0].source_ts == datetime(2026, 6, 25, 13, 2, tzinfo=UTC)
+
+
+def test_history_returns_most_recent_points_oldest_first(db_session):
+    # Insert 5 minute-bars; ask for the latest 3.
+    market_repository.insert_observations(db_session, [_obs(WTI, m, f"78.{m}0") for m in range(5)])
+    rows = market_repository.history(db_session, "WTI", limit=3)
+
+    # The newest 3 (minutes 2,3,4), presented oldest first — not the oldest 3.
+    assert [r.source_ts.minute for r in rows] == [2, 3, 4]
 
 
 def test_run_ingestion_persists_and_audits(db_session, monkeypatch):

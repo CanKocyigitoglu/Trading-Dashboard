@@ -79,14 +79,21 @@ def history(
     until: datetime | None = None,
     limit: int = 5000,
 ) -> list[MarketObservation]:
-    """Observations for ``symbol`` in source-time order over an optional range."""
+    """The most recent ``limit`` observations for ``symbol`` over an optional
+    range, returned oldest first.
+
+    The limit is applied to the newest rows (``ORDER BY source_ts DESC``) so a
+    chart shows the current tail of the series, not the oldest stored points.
+    """
     stmt = select(MarketObservation).where(MarketObservation.symbol == symbol)
     if since is not None:
         stmt = stmt.where(MarketObservation.source_ts >= since)
     if until is not None:
         stmt = stmt.where(MarketObservation.source_ts <= until)
-    stmt = stmt.order_by(MarketObservation.source_ts.asc()).limit(limit)
-    return list(session.scalars(stmt))
+    stmt = stmt.order_by(MarketObservation.source_ts.desc()).limit(limit)
+    rows = list(session.scalars(stmt))
+    rows.reverse()  # newest `limit` rows, presented oldest first
+    return rows
 
 
 def record_ingestion_run(
