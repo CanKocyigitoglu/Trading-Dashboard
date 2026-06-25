@@ -14,10 +14,11 @@ from ..config import Settings, get_settings
 from ..schemas.models import (
     AlertsResponse,
     FilterOptions,
+    MarketOverviewResponse,
     PositionsResponse,
     SummaryOut,
 )
-from ..services import dashboard
+from ..services import dashboard, market
 from ..services.dashboard import Filters
 
 router = APIRouter(prefix="/api/v1")
@@ -67,3 +68,8 @@ def summary(filters: FiltersDep, settings: SettingsDep) -> SummaryOut:
 @router.get("/alerts", response_model=AlertsResponse)
 def alerts(filters: FiltersDep, settings: SettingsDep) -> AlertsResponse:
     return dashboard.get_alerts(settings.sample_data_path, filters)
+
+
+@router.get("/market", response_model=MarketOverviewResponse)
+def market_overview() -> MarketOverviewResponse:
+    return market.get_market_overview()

@@ -69,6 +69,31 @@ export interface FilterOptions {
   commodities: string[];
 }
 
+export interface MarketSeriesPoint {
+  t: string;
+  price: number;
+}
+
+export interface MarketQuote {
+  symbol: string;
+  name: string;
+  commodity: string;
+  unit: string;
+  currency: string;
+  last_price: number;
+  previous_price: number;
+  change: number;
+  change_pct: number | null;
+  as_of: string;
+  series: MarketSeriesPoint[];
+}
+
+export interface MarketOverviewResponse {
+  as_of: string;
+  synthetic: boolean;
+  quotes: MarketQuote[];
+}
+
 export interface Filters {
   desks: string[];
   traders: string[];

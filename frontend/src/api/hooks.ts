@@ -5,9 +5,18 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { getJson } from './client';
-import type { AlertsResponse, FilterOptions, Filters, PositionsResponse, SummaryOut } from './types';
+import type {
+  AlertsResponse,
+  FilterOptions,
+  Filters,
+  MarketOverviewResponse,
+  PositionsResponse,
+  SummaryOut,
+} from './types';
 
 const POLL_MS = 30_000;
+// The market page polls faster so synthetic prices visibly tick.
+const MARKET_POLL_MS = 5_000;
 
 export function useFilterOptions() {
   return useQuery({
@@ -39,6 +48,15 @@ export function useAlerts(filters: Filters) {
     queryKey: ['alerts', filters],
     queryFn: () => getJson<AlertsResponse>('/alerts', filters),
     refetchInterval: POLL_MS,
+    keepPreviousData: true,
+  });
+}
+
+export function useMarketOverview() {
+  return useQuery({
+    queryKey: ['market'],
+    queryFn: () => getJson<MarketOverviewResponse>('/market'),
+    refetchInterval: MARKET_POLL_MS,
     keepPreviousData: true,
   });
 }

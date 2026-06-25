@@ -81,3 +81,39 @@ class FilterOptions(BaseModel):
     desks: list[str]
     traders: list[str]
     commodities: list[str]
+
+
+class MarketSeriesPoint(BaseModel):
+    """One point on a synthetic price series. ``t`` is bucket-aligned UTC."""
+
+    t: datetime
+    price: float
+
+
+class MarketQuote(BaseModel):
+    """A synthetic, illustrative market quote for one commodity.
+
+    ``change`` is the move versus the previous point and ``change_pct`` is that
+    move as a percentage; ``change_pct`` is ``None`` when the previous price is
+    zero so an unavailable ratio is never shown as zero.
+    """
+
+    symbol: str
+    name: str
+    commodity: str
+    unit: str
+    currency: str
+    last_price: float
+    previous_price: float
+    change: float
+    change_pct: float | None
+    as_of: datetime
+    series: list[MarketSeriesPoint]
+
+
+class MarketOverviewResponse(BaseModel):
+    """Synthetic market snapshot. ``synthetic`` is always ``True`` this phase."""
+
+    as_of: datetime
+    synthetic: bool
+    quotes: list[MarketQuote]
