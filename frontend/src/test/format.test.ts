@@ -6,6 +6,7 @@ import {
   formatMoney,
   formatNumber,
   formatPercent,
+  toLondonChartTime,
 } from '../format/format';
 
 describe('formatMoney', () => {
@@ -44,5 +45,15 @@ describe('formatDateTimeLondon', () => {
 
   it('returns missing placeholder for null', () => {
     expect(formatDateTimeLondon(null)).toBe(MISSING);
+  });
+});
+
+describe('toLondonChartTime', () => {
+  it('shifts UTC to BST wall-clock in summer (UTC+1)', () => {
+    expect(toLondonChartTime('2026-06-25T20:40:00Z')).toBe('2026-06-25 21:40:00');
+  });
+
+  it('keeps UTC wall-clock in winter GMT (UTC+0)', () => {
+    expect(toLondonChartTime('2026-01-15T20:40:00Z')).toBe('2026-01-15 20:40:00');
   });
 });

@@ -5,6 +5,7 @@ import type { PlotParams } from 'react-plotly.js';
 import createPlotlyComponent from 'react-plotly.js/factory';
 
 import type { MarketSeriesPoint } from '../../api/types';
+import { toLondonChartTime } from '../../format/format';
 
 const Plot = createPlotlyComponent(Plotly);
 
@@ -24,10 +25,10 @@ export function PriceChart({ series, name, symbol, currency, unit }: PriceChartP
       {
         type: 'scatter',
         mode: 'lines',
-        x: series.map((p) => p.t),
+        x: series.map((p) => toLondonChartTime(p.t)),
         y: series.map((p) => p.price),
         line: { color: '#1976d2' },
-        hovertemplate: `%{x|%d %b %H:%M} UTC: ${currency} %{y:,.2f}<extra></extra>`,
+        hovertemplate: `%{x|%d %b %H:%M}: ${currency} %{y:,.2f}<extra></extra>`,
       },
     ],
     [series, currency],
@@ -36,7 +37,7 @@ export function PriceChart({ series, name, symbol, currency, unit }: PriceChartP
   const layout: PlotParams['layout'] = {
     height: 320,
     margin: { l: 72, r: 16, t: 8, b: 40 },
-    xaxis: { title: { text: 'Time (UTC)' } },
+    xaxis: { title: { text: 'Time (Europe/London)' } },
     yaxis: { title: { text: `Price (${currency} / ${unit})` } },
   };
 

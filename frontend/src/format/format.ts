@@ -34,6 +34,25 @@ export function formatPercent(value: number | null | undefined, fractionDigits =
   return `${value.toFixed(fractionDigits)}%`;
 }
 
+// Convert a UTC ISO timestamp to a Europe/London wall-clock string
+// ("YYYY-MM-DD HH:MM:SS") for Plotly, which has no timezone support and plots
+// the literal calendar values it is handed. Honours BST/GMT automatically.
+export function toLondonChartTime(iso: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: DISPLAY_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(iso));
+  const p: Record<string, string> = {};
+  for (const part of parts) p[part.type] = part.value;
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+}
+
 // Render an ISO/UTC timestamp in the default display timezone (Europe/London).
 export function formatDateTimeLondon(iso: string | null | undefined): string {
   if (!iso) return MISSING;
