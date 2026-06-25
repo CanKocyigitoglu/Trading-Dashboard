@@ -1,0 +1,15 @@
+position_id,desk,trader,instrument,commodity,unit,quantity,avg_price,market_price,currency,var_1d,exposure_limit,as_of
+P001,Crude Oil,Alice Chen,WTI Crude Futures,WTI Crude,bbl,50000,74.50,78.20,USD,180000,4500000,2026-06-24T15:30:00Z
+P002,Crude Oil,Alice Chen,Brent Crude Futures,Brent Crude,bbl,-30000,82.10,80.90,USD,140000,3000000,2026-06-24T15:30:00Z
+P003,Natural Gas,Bob Martin,Henry Hub Gas Futures,Natural Gas,MMBtu,800000,3.10,2.85,USD,95000,2500000,2026-06-24T15:30:00Z
+P004,Natural Gas,Bob Martin,Henry Hub Gas Futures,Natural Gas,MMBtu,-400000,3.05,2.85,USD,55000,1500000,2026-06-24T15:30:00Z
+P005,Power,Carol Diaz,German Power Baseload,Power,MWh,25000,88.00,95.50,USD,210000,2200000,2026-06-24T15:30:00Z
+P006,Power,Carol Diaz,German Power Baseload,Power,MWh,-10000,91.00,95.50,USD,85000,1200000,2026-06-24T15:30:00Z
+P007,Metals,David Kim,Copper Futures,Copper,MT,300,9200,9650,USD,160000,3200000,2026-06-24T15:30:00Z
+P008,Metals,David Kim,Aluminium Futures,Aluminium,MT,-500,2450,2380,USD,70000,1500000,2026-06-24T15:30:00Z
+P009,Agriculture,Eva Novak,Wheat Futures,Wheat,bu,200000,6.40,5.95,USD,60000,1400000,2026-06-24T15:30:00Z
+P010,Agriculture,Eva Novak,Corn Futures,Corn,bu,350000,4.30,4.62,USD,72000,1700000,2026-06-24T15:30:00Z
+P011,Crude Oil,Frank Lopez,WTI Crude Options,WTI Crude,bbl,20000,76.00,78.20,USD,90000,2000000,2026-06-24T15:30:00Z
+P012,Natural Gas,Bob Martin,Henry Hub Gas Options,Natural Gas,MMBtu,600000,2.95,2.85,USD,40000,1800000,2026-06-24T15:30:00Z
+P013,Metals,David Kim,Gold Futures,Gold,oz,-1500,2350,2410,USD,130000,4000000,2026-06-24T15:30:00Z
+P014,Agriculture,Eva Novak,Soybean Futures,Soybean,bu,150000,11.20,,USD,,1600000,2026-06-24T15:30:00Z

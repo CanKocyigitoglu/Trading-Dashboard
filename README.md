@@ -1,85 +1,111 @@
-# Trading Risk Dashboard (Prototype)
+# Trading Risk Dashboard
 
-A lightweight, local prototype of an internal trading-risk dashboard for a
-commodities trading business. It demonstrates how a spreadsheet-based workflow
-could become a simple internal tool for viewing positions, exposure, P/L,
-utilisation and exceptions.
+Internal decision-support tooling for a commodities trading business, starting
+with **trading risk (TMT)**. This repository contains the first end-to-end
+slice: a read-only dashboard that surfaces positions, exposure, P/L,
+utilisation and supplied VaR, and raises deterministic, explainable alerts.
 
-> **Demonstration only.** This is a decision-support prototype, not a
-> production trading, pricing, risk-management or order-execution system. All
-> sample data is **synthetic**.
+> **Demonstration prototype.** Not a trade-execution, pricing or booking
+> system. All sample data is **synthetic**. Upstream access is read-only.
 
-## What it shows
+## Architecture
 
-The first screen answers four questions:
+A modular monolith:
 
-1. **What is the current exposure?** — Net and gross exposure KPIs.
-2. **Where is the largest concentration?** — Exposure-by-desk chart.
-3. **What has moved?** — Unrealised P/L KPI and P/L-by-trader chart.
-4. **What requires attention?** — Alerts & exceptions table.
-
-It includes 5 KPI cards, a positions table, two charts, filters (desk / trader
-/ commodity), a deterministic alerts section, and a visible data timestamp.
-
-## Quick start
-
-```bash
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
+```
+React + TypeScript (Vite, MUI, Plotly, TanStack Query)        frontend/
+        │  typed API over /api/v1
+FastAPI + Pydantic + pandas                                    backend/
+        │  read-only source adapter → domain calc → alerts → typed API
+data/sample/positions.csv  (deterministic synthetic source)
 ```
 
-## Development commands
+Flow: **source adapter → domain valuation → portfolio summary + alert
+evaluation → typed API → dashboard**. Financial definitions live only in the
+backend domain/alert layers; the frontend owns presentation, formatting,
+filters and states. The frontend never duplicates business logic.
+
+## What this slice includes
+
+- **Backend** (`backend/app`)
+  - `domain/` — position valuation and portfolio aggregation, pure functions
+    using `Decimal`. Explicit sign convention; missing values kept distinct
+    from zero; no cross-currency aggregation without an FX rate.
+  - `alerts/` — deterministic rules (exposure utilisation, P/L loss, VaR,
+    missing data, staleness) with thresholds in backend config only.
+  - `adapters/` — read-only CSV source, precision-preserving.
+  - `api/` (`/api/v1`) — `health`, `filters`, `positions` (paginated/filterable),
+    `summary`, `alerts`. Errors map to stable machine-readable codes.
+- **Frontend** (`frontend/src`)
+  - KPI cards, positions table (MUI X Data Grid), exposure-concentration chart
+    (Plotly), alerts panel, and desk/trader/commodity filters synced to the URL.
+  - Loading, empty, stale-refresh and error states. Polling for near-real-time
+    refresh, preserving the last good response during background refresh.
+  - Severity shown as **text and** colour (never colour alone).
+
+## Deferred (intentionally not built yet)
+
+The project rules say not to build infrastructure for hypothetical needs. The
+first dashboard is read-only and needs no application-owned state, so these are
+deferred until a feature requires them:
+
+- **PostgreSQL + SQLAlchemy + Alembic + Docker Compose** — added with the first
+  write workflow (e.g. alert acknowledgements, audit). Not substituted with
+  SQLite.
+- **Authentication (OIDC/SSO)** — added when access control is required.
+
+## Toolchain note
+
+The prescribed stack was adapted to the local environment (Node 16, no Docker):
+the frontend pins **Vite 4 + Vitest 0.34** (Node-16-compatible) instead of
+Vite 5. The backend matches the spec (Python 3.11+, FastAPI, Pydantic v2,
+pandas). When Node 18+ and Docker are available, the frontend versions can be
+bumped and the persistence slice added.
+
+## Running locally
+
+Prerequisites: Python 3.11+ and Node.js (16+). No database is required.
 
 ```bash
-python -m pytest          # business-logic tests (metrics + alerts)
-ruff check .              # lint
-ruff format --check .     # formatting
+# 1) Install
+cd backend  && python -m pip install -r requirements-dev.txt
+cd ../frontend && npm install
+
+# 2) Run the backend (terminal 1)
+cd backend && python -m uvicorn app.main:app --reload --port 8000
+
+# 3) Run the frontend (terminal 2) — proxies /api to the backend
+cd frontend && npm run dev
+# open http://localhost:5173
 ```
 
-## Project layout
+With GNU Make available, the same steps are `make setup`, `make dev-backend`,
+`make dev-frontend`.
 
-| Path                 | Responsibility                                             |
-| -------------------- | --------------------------------------------------------- |
-| `app.py`             | Streamlit presentation only                               |
-| `src/config.py`      | Alert thresholds and business labels (single source)      |
-| `src/data_loader.py` | CSV loading and typing; preserves missing values          |
-| `src/metrics.py`     | KPIs and aggregations (pure, testable)                     |
-| `src/alerts.py`      | Deterministic alert rules (pure, testable)                |
-| `src/formatting.py`  | Presentation formatting helpers                           |
-| `data/positions.csv` | Deterministic synthetic positions                         |
-| `tests/`             | pytest suite for the calculation and alert layers         |
+## Tests and checks
 
-Calculations are kept separate from presentation so the financial logic can be
-unit tested in isolation.
+```bash
+# Backend
+cd backend && python -m pytest -q && ruff check . && ruff format --check . && mypy
 
-## Key conventions and assumptions
+# Frontend
+cd frontend && npm test && npm run typecheck && npm run build
+```
 
-- **Single currency (USD).** All positions are in USD to avoid inventing FX
-  rates. Currency is shown explicitly.
-- **Sign convention.** `quantity` is signed: long is positive, short is
-  negative. `market_value = quantity × market_price`;
-  `unrealised_pl = quantity × (market_price − avg_price)`. A short gains when
-  the price falls.
-- **Missing vs zero.** Missing inputs are kept as missing (never coerced to
-  zero), excluded from totals, and surfaced both as a warning and a
-  data-quality alert. Row 14 of the sample data has missing values on purpose
-  to demonstrate this.
-- **VaR is a supplied input.** Per-position 1-day VaR is read from the data,
-  not computed. The portfolio VaR card is a **simple sum** that ignores
-  diversification — a prototype figure, not an authoritative portfolio VaR.
+Current status: backend **36 pytest** passing (ruff + mypy clean); frontend
+**10 Vitest** passing (tsc + build clean). Alert rules are tested immediately
+below, at and above each threshold, plus missing, stale and duplicate inputs.
 
-## Alerts
+## Key data rules honoured
 
-All alert rules are plain numeric/temporal comparisons against thresholds in
-`src/config.py` — no model or heuristic. Each alert reports its severity, the
-affected scope, the observed value, the threshold and a plain-English reason:
-
-| Rule           | Condition                                   | Severity |
-| -------------- | ------------------------------------------- | -------- |
-| Exposure limit | utilisation ≥ 100% (breach) / ≥ 85% (warn)  | High / Medium |
-| P/L            | unrealised P/L < −150,000 USD               | High     |
-| VaR            | supplied 1-day VaR > 200,000 USD            | Medium   |
-| Data quality   | a required value is missing                 | High     |
-| Staleness      | dataset timestamp older than 24h            | High     |
-
-Thresholds are prototype demonstration values and can be adjusted in one place.
+- Sign convention explicit: `quantity` signed (long +, short −);
+  `market_value = quantity × market_price`,
+  `unrealised_pl = quantity × (market_price − avg_price)`.
+- Missing inputs (`market_price`, `var_1d`) are preserved as null, excluded
+  from totals, and flagged — never treated as zero. Row P014 demonstrates this.
+- Money computed in `Decimal`; rounded only for display.
+- VaR is a **supplied** value; the portfolio VaR card is a labelled
+  illustrative simple sum (ignores diversification), not an authoritative VaR.
+- Timestamps stored in UTC, displayed in `Europe/London`.
+- No currency aggregation without an approved FX rate (the API refuses it).
+- Alert thresholds live in `backend/app/alerts/config.py`, never the frontend.

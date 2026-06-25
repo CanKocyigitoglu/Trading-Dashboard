@@ -2,3 +2,20 @@
 .claude/
 CLAUDE.md
 SKILLS.md
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Node / frontend
+node_modules/
+dist/
+*.local
+
+# Environment
+.env
